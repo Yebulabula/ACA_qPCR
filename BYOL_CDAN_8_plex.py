@@ -508,6 +508,14 @@ def train_BYOL_CDAN(config, transformer_model, device):
             model_path = os.path.join(dir_out, f'pretrained_model_CL_{timestamp}.pth')
             torch.save(pretrained_model.state_dict(), model_path)
             logging.info(f'BYOL Epoch {epoch}: Model saved to {model_path} with loss {avg_loss:.6f}')
+        
+        if (epoch + 1) % 50 == 0:
+            logging.info(f'BYOL Epoch {epoch}, Avg Loss: {avg_loss:.6f}, Best Loss: {best_loss:.6f}')
+            pretrained_model = learner.online_encoder.net
+            model_path = os.path.join(dir_out, f'pretrained_model_CL_{timestamp}.pth')
+            torch.save(pretrained_model.state_dict(), model_path)
+            logging.info(f'BYOL Epoch {epoch}: Model saved to {model_path} with loss {avg_loss:.6f}')
+            
     return pretrained_model
 
 
@@ -659,20 +667,6 @@ if __name__ == "__main__":
     if args.run_byol_cdan:
         # logging.info("\n\n=========== STARTING BYOL+CDAN MODEL TRAINING ===========")
         byol_cdan_transformer = Transformer_for_byol(config['class_num'], config['N_seq'], **F_config).to(device)
-           
-        learner = BYOL(
-            byol_cdan_transformer,
-            image_size=50,
-            hidden_layer='avgpool',
-            config=config,
-            F_config=F_config
-        ).to(device)
-        load_matching_state_dict(
-            learner.online_encoder.net,
-            PRETRAINED_BYOL_CHECKPOINT,
-            device,
-            strip_prefixes=True,
-        )
 
         byol_cdan_best_model = train_BYOL_CDAN(config, byol_cdan_transformer, device)
 

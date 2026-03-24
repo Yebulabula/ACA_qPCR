@@ -455,6 +455,13 @@ def train_BYOL_CDAN(config, transformer_model, device):
             model_path = os.path.join(dir_out, f'pretrained_model_CL_{timestamp}.pth')
             torch.save(pretrained_model.state_dict(), model_path)
             logging.info(f'BYOL Epoch {epoch}: Model saved to {model_path} with loss {avg_loss:.6f}')
+            
+        if (epoch + 1) % 50 == 0:
+            logging.info(f'BYOL Epoch {epoch}, Avg Loss: {avg_loss:.6f}, Best Loss: {best_loss:.6f}')
+            pretrained_model = learner.online_encoder.net
+            model_path = os.path.join(dir_out, f'pretrained_model_CL_{timestamp}.pth')
+            torch.save(pretrained_model.state_dict(), model_path)
+            logging.info(f'BYOL Epoch {epoch}: Model saved to {model_path} with loss {avg_loss:.6f}')
 
     # # Plot contrastive learning loss curve
     # plt.figure()
