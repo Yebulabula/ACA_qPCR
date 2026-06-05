@@ -1,7 +1,24 @@
-# Programmable Amplification Kinetics Enable AI-Driven High-Level Multiplexing in Single-Channel TaqMan Real-Time PCR
+<h1 align="center">
+Programmable Amplification Kinetics Enable AI-Driven High-Level Multiplexing in Single-Channel TaqMan Real-Time PCR
+</h1>
 
-Official implementation for BYOL pretraining and T-CDAN training for qPCR curve
-classification.
+<p align="center">
+  <a href="#installation">Installation</a> |
+  <a href="#data-preparation">Data</a> |
+  <a href="#byol-pretraining">BYOL Pretraining</a> |
+  <a href="#t-cdan-training">T-CDAN Training</a> |
+  <a href="#evaluation">Evaluation</a>
+</p>
+
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.10-blue">
+  <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-required-ee4c2c">
+  <img alt="Task" src="https://img.shields.io/badge/Task-qPCR%20classification-green">
+</p>
+
+<p align="center">
+  Official implementation for BYOL pretraining and T-CDAN fine-tuning for qPCR curve classification.
+</p>
 
 ## Authors
 
@@ -9,34 +26,84 @@ Louis Kreitmann*, Kenny Malpartida-Cardenas*, Ye Mao*, Zexuan Zhao, San Chun Hin
 Anirudhha Hazarika, Ke Xu, Luca Miglietta, Zara Breese, Alison H. Holmes,
 Karen Brengel-Pesce, Laurent Drazek, and Jesus Rodriguez-Manzano.
 
-*Equal contribution.
+*Equal contribution. Correspondence: `j.rodriguez-manzano@imperial.ac.uk`
 
-## Affiliations
+**Affiliations.** Imperial College London; The Fleming Initiative, Imperial
+College London and Imperial College Healthcare NHS Trust; bioMerieux.
 
-1. Department of Infectious Disease, Imperial College London, London, UK
-2. Open Innovation & Partnerships, bioMerieux, Marcy-l'Etoile, France
-3. Department of Electrical and Electronic Engineering, Imperial College London, London, UK
-4. The Fleming Initiative, Imperial College London and Imperial College Healthcare NHS Trust, London, UK
-5. Molecular Biology, Research & Development, bioMerieux, Grenoble, France
-6. Data Science, Research & Development, bioMerieux, Grenoble, France
+## Contents
 
-Correspondence: `j.rodriguez-manzano@imperial.ac.uk`
+- [News](#news)
+- [Key Takeaways](#key-takeaways)
+- [Expected Repository Structure](#expected-repository-structure)
+- [Installation](#installation)
+- [Data Preparation](#data-preparation)
+- [BYOL Pretraining](#byol-pretraining)
+- [T-CDAN Training](#t-cdan-training)
+- [Evaluation](#evaluation)
+- [Citation](#citation)
+- [License](#license)
 
-## Repository Layout
+## News
+
+- `2026-06-05`: Repository reorganized with a compact `src/` layout and a
+  BYOL -> T-CDAN workflow.
+
+## Key Takeaways
+
+- **Core problem.** Single-channel TaqMan real-time PCR limits multiplexing
+  because overlapping fluorescence signals are difficult to separate reliably.
+- **Model idea.** Programmable amplification kinetics provide curve-level
+  signatures that can be learned by a Transformer-based qPCR classifier.
+- **Training recipe.** BYOL contrastive pretraining learns curve
+  representations before T-CDAN adapts the model for target-domain
+  classification.
+- **Supported settings.** The repository includes 7-plex and 8-plex entry
+  points with matching dataset and output folders.
+
+## Expected Repository Structure
+
+Place downloaded data inside `ACA_qPCR/`:
 
 ```text
 ACA_qPCR/
-  BYOL_CDAN_7_plex.py        # 7-plex entry point
-  BYOL_CDAN_8_plex.py        # 8-plex entry point
-  requirements.txt
-  src/                       # implementation code
-  7_plex_data/               # downloaded 7-plex data
-  8_plex_data/               # downloaded 8-plex data
-  7_plex_output/             # generated checkpoints/results
-  8_plex_output/             # generated checkpoints/results
+├── BYOL_CDAN_7_plex.py        # 7-plex entry point
+├── BYOL_CDAN_8_plex.py        # 8-plex entry point
+├── requirements.txt
+├── src/                       # implementation code
+│   ├── byol_cdan_common.py
+│   ├── byol-pytorch/
+│   ├── tools/
+│   └── tst/
+├── 7_plex_data/               # downloaded 7-plex data
+├── 8_plex_data/               # downloaded 8-plex data
+├── 7_plex_output/             # generated 7-plex checkpoints/results
+└── 8_plex_output/             # generated 8-plex checkpoints/results
 ```
 
-## Dataset
+## Installation
+
+### 1. Create an environment
+
+```bash
+conda create -n byol-cdan python=3.10 -y
+conda activate byol-cdan
+```
+
+### 2. Install PyTorch
+
+Install the PyTorch build matching your CUDA setup. For CPU-only use, the default
+pip package is sufficient; for GPU training, follow the official PyTorch install
+selector for your CUDA version.
+
+### 3. Install remaining dependencies
+
+```bash
+cd ACA_qPCR
+pip install -r requirements.txt
+```
+
+## Data Preparation
 
 Download the dataset from the temporary Google Drive link:
 
@@ -44,8 +111,7 @@ Download the dataset from the temporary Google Drive link:
 https://drive.google.com/drive/folders/<temporary-dataset-link>
 ```
 
-Place the downloaded data folders directly inside `ACA_qPCR/`. The expected CSVs
-include:
+Extract the downloaded folders into `ACA_qPCR/`. The expected files include:
 
 - `7_plex_data/df_qPCR_GB_2025.csv`
 - `7_plex_data/df_dPCR_GB_2025.csv`
@@ -56,44 +122,43 @@ include:
 - `8_plex_data/df_8plex_CNS_dPCR_total.csv`
 - `8_plex_data/params_df_5_spline_total.csv`
 
-Each curve CSV should contain numeric qPCR curve columns and a `Target_cat` label
-column.
+Each curve CSV should contain numeric qPCR curve columns and a `Target_cat`
+label column.
 
-## Environment
-
-```bash
-conda create -n byol-cdan python=3.10 -y
-conda activate byol-cdan
-cd ACA_qPCR
-pip install -r requirements.txt
-```
-
-For GPU training, install the PyTorch build matching your CUDA version before
-installing the remaining packages.
-
-## Train BYOL Then T-CDAN
+## BYOL Pretraining
 
 Run all commands from `ACA_qPCR/`.
 
-For 8-plex:
+### 8-plex
 
 ```bash
-# 1. BYOL contrastive pretraining
 python BYOL_CDAN_8_plex.py --run_cl true
+```
 
-# 2. T-CDAN training initialized from the BYOL checkpoint
+### 7-plex
+
+```bash
+python BYOL_CDAN_7_plex.py --run_cl true
+```
+
+The final BYOL checkpoints are saved as:
+
+- `8_plex_output/pretrained_model_CL_final.pth`
+- `7_plex_output/pretrained_model_CL_final.pth`
+
+## T-CDAN Training
+
+### 8-plex
+
+```bash
 python BYOL_CDAN_8_plex.py \
   --run_byol_cdan true \
   --pretrained_cl_checkpoint 8_plex_output/pretrained_model_CL_final.pth
 ```
 
-For 7-plex:
+### 7-plex
 
 ```bash
-# 1. BYOL contrastive pretraining
-python BYOL_CDAN_7_plex.py --run_cl true
-
-# 2. T-CDAN training initialized from the BYOL checkpoint
 python BYOL_CDAN_7_plex.py \
   --run_byol_cdan true \
   --pretrained_cl_checkpoint 7_plex_output/pretrained_model_CL_final.pth
@@ -105,7 +170,7 @@ Useful options include `--num_iterations`, `--test_interval`, `--batch_size`,
 
 ## Evaluation
 
-Evaluate a saved 8-plex T-CDAN checkpoint:
+### 8-plex
 
 ```bash
 python BYOL_CDAN_8_plex.py \
@@ -113,7 +178,7 @@ python BYOL_CDAN_8_plex.py \
   --eval_split test
 ```
 
-Evaluate a saved 7-plex T-CDAN checkpoint:
+### 7-plex
 
 ```bash
 python BYOL_CDAN_7_plex.py \
@@ -121,6 +186,22 @@ python BYOL_CDAN_7_plex.py \
   --eval_split test
 ```
 
-Training and evaluation outputs are written to `7_plex_output/` or
-`8_plex_output/`, including checkpoints, logs, confusion matrices,
-`run_config.json`, and `final_results.json`.
+Outputs are written to `7_plex_output/` or `8_plex_output/`, including
+checkpoints, logs, confusion matrices, `run_config.json`, and
+`final_results.json`.
+
+## Citation
+
+If you find this repository useful, please cite the paper:
+
+```bibtex
+@article{kreitmann2026programmable,
+  title   = {Programmable Amplification Kinetics Enable AI-Driven High-Level Multiplexing in Single-Channel TaqMan Real-Time PCR},
+  author  = {Kreitmann, Louis and Malpartida-Cardenas, Kenny and Mao, Ye and Zhao, Zexuan and San Chun Hin and Hazarika, Anirudhha and Xu, Ke and Miglietta, Luca and Breese, Zara and Holmes, Alison H. and Brengel-Pesce, Karen and Drazek, Laurent and Rodriguez-Manzano, Jesus},
+  year    = {2026}
+}
+```
+
+## License
+
+Please refer to the project license before using the code or dataset.
