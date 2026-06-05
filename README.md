@@ -11,9 +11,15 @@ Programmable Amplification Kinetics Enable AI-Driven High-Level Multiplexing in 
 </p>
 
 <p align="center">
-  <img alt="Python" src="https://img.shields.io/badge/Python-3.10-blue">
-  <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-required-ee4c2c">
-  <img alt="Task" src="https://img.shields.io/badge/Task-qPCR%20classification-green">
+  <a href="https://drive.google.com/file/d/TEMPORARY_PAPER_LINK/view">
+    <img alt="Paper" src="https://img.shields.io/badge/Paper-Temporary_Link-blue">
+  </a>
+  <a href="https://github.com/TEMPORARY_CODE_LINK">
+    <img alt="Code" src="https://img.shields.io/badge/Code-GitHub-black">
+  </a>
+  <a href="https://drive.google.com/drive/folders/TEMPORARY_CHECKPOINT_LINK">
+    <img alt="Checkpoint" src="https://img.shields.io/badge/Checkpoint-Temporary_Link-green">
+  </a>
 </p>
 
 <p align="center">
@@ -38,6 +44,7 @@ College London and Imperial College Healthcare NHS Trust; bioMerieux.
 - [Expected Repository Structure](#expected-repository-structure)
 - [Installation](#installation)
 - [Data Preparation](#data-preparation)
+- [Download Checkpoints](#download-checkpoints)
 - [BYOL Pretraining](#byol-pretraining)
 - [T-CDAN Training](#t-cdan-training)
 - [Evaluation](#evaluation)
@@ -46,20 +53,8 @@ College London and Imperial College Healthcare NHS Trust; bioMerieux.
 
 ## News
 
-- `2026-06-05`: Repository reorganized with a compact `src/` layout and a
-  BYOL -> T-CDAN workflow.
+- `2026-06-05`: All code, checkpoints, and datasets are released!
 
-## Key Takeaways
-
-- **Core problem.** Single-channel TaqMan real-time PCR limits multiplexing
-  because overlapping fluorescence signals are difficult to separate reliably.
-- **Model idea.** Programmable amplification kinetics provide curve-level
-  signatures that can be learned by a Transformer-based qPCR classifier.
-- **Training recipe.** BYOL contrastive pretraining learns curve
-  representations before T-CDAN adapts the model for target-domain
-  classification.
-- **Supported settings.** The repository includes 7-plex and 8-plex entry
-  points with matching dataset and output folders.
 
 ## Expected Repository Structure
 
@@ -67,18 +62,18 @@ Place downloaded data inside `ACA_qPCR/`:
 
 ```text
 ACA_qPCR/
-├── BYOL_CDAN_7_plex.py        # 7-plex entry point
-├── BYOL_CDAN_8_plex.py        # 8-plex entry point
-├── requirements.txt
-├── src/                       # implementation code
-│   ├── byol_cdan_common.py
-│   ├── byol-pytorch/
-│   ├── tools/
-│   └── tst/
-├── 7_plex_data/               # downloaded 7-plex data
-├── 8_plex_data/               # downloaded 8-plex data
-├── 7_plex_output/             # generated 7-plex checkpoints/results
-└── 8_plex_output/             # generated 8-plex checkpoints/results
+|-- BYOL_CDAN_7_plex.py        # 7-plex entry point
+|-- BYOL_CDAN_8_plex.py        # 8-plex entry point
+|-- requirements.txt
+|-- src/                       # implementation code
+|   |-- byol_cdan_common.py
+|   |-- byol-pytorch/
+|   |-- tools/
+|   `-- tst/
+|-- 7_plex/               # downloaded 7-plex data
+|-- 8_plex/               # downloaded 8-plex data
+|-- 7_plex_output/             # generated 7-plex checkpoints/results
+`-- 8_plex_output/             # generated 8-plex checkpoints/results
 ```
 
 ## Installation
@@ -86,8 +81,8 @@ ACA_qPCR/
 ### 1. Create an environment
 
 ```bash
-conda create -n byol-cdan python=3.10 -y
-conda activate byol-cdan
+conda create -n aca_pcr python=3.10 -y
+conda activate aca_pcr
 ```
 
 ### 2. Install PyTorch
@@ -113,17 +108,38 @@ https://drive.google.com/drive/folders/<temporary-dataset-link>
 
 Extract the downloaded folders into `ACA_qPCR/`. The expected files include:
 
-- `7_plex_data/df_qPCR_GB_2025.csv`
-- `7_plex_data/df_dPCR_GB_2025.csv`
-- `7_plex_data/df_dPCR_SP_2025.csv`
-- `7_plex_data/param_df_5_20250305_2248.csv`
-- `8_plex_data/df_8plex_CNS_qPCR_GB.csv`
-- `8_plex_data/df_8plex_CNS_qPCR_SP.csv`
-- `8_plex_data/df_8plex_CNS_dPCR_total.csv`
-- `8_plex_data/params_df_5_spline_total.csv`
+- `7_plex/df_qPCR_GB_2025.csv`
+- `7_plex/df_dPCR_GB_2025.csv`
+- `7_plex/df_dPCR_SP_2025.csv`
+- `7_plex/param_df_5_20250305_2248.csv`
+- `8_plex/df_8plex_CNS_qPCR_GB.csv`
+- `8_plex/df_8plex_CNS_qPCR_SP.csv`
+- `8_plex/df_8plex_CNS_dPCR_total.csv`
+- `8_plex/params_df_5_spline_total.csv`
 
 Each curve CSV should contain numeric qPCR curve columns and a `Target_cat`
 label column.
+
+## Download Checkpoints
+
+Download pretrained BYOL and T-CDAN checkpoints from the temporary Google Drive
+link:
+
+```text
+https://drive.google.com/drive/folders/<temporary-checkpoint-link>
+```
+
+Place the checkpoint files under the corresponding output folders:
+
+```text
+ACA_qPCR/
+|-- 7_plex_output/
+|   |-- pretrained_model_CL_final.pth
+|   `-- byol_cdan.pth
+`-- 8_plex_output/
+    |-- pretrained_model_CL_final.pth
+    `-- byol_cdan.pth
+```
 
 ## BYOL Pretraining
 
@@ -165,7 +181,7 @@ python BYOL_CDAN_7_plex.py \
 ```
 
 Useful options include `--num_iterations`, `--test_interval`, `--batch_size`,
-`--lr`, `--weight_decay`, `--trade_off`, `--dir_data`, `--dir_out`, and
+`--lr`, `--weight_decay`, `--trade_off`, `--dir`, `--dir_out`, and
 `--wandb`.
 
 ## Evaluation
@@ -204,4 +220,4 @@ If you find this repository useful, please cite the paper:
 
 ## License
 
-Please refer to the project license before using the code or dataset.
+This project is released under the [MIT License](LICENSE).
