@@ -17,10 +17,10 @@ Programmable Amplification Kinetics Enable AI-Driven High-Level Multiplexing in 
   <a href="https://github.com/TEMPORARY_CODE_LINK">
     <img alt="Code" src="https://img.shields.io/badge/Code-GitHub-black">
   </a>
-  <a href="https://drive.google.com/drive/folders/TEMPORARY_CHECKPOINT_LINK">
+  <a href="https://drive.google.com/drive/folders/1oxxWH3mHM2xiN-eWj-X_3C-GE3sa8dJe?usp=drive_link">
     <img alt="Checkpoint" src="https://img.shields.io/badge/Checkpoint-Temporary_Link-green">
   </a>
-  <a href="https://drive.google.com/drive/folders/TEMPORARY_DATASET_LINK">
+  <a href="https://drive.google.com/drive/folders/1oxxWH3mHM2xiN-eWj-X_3C-GE3sa8dJe">
     <img alt="Dataset" src="https://img.shields.io/badge/Dataset-Temporary_Link-orange">
   </a>
 </p>
@@ -103,10 +103,10 @@ pip install -r requirements.txt
 
 ## Data Preparation
 
-Download the dataset from the temporary Google Drive link:
+Download the dataset from Google Drive:
 
 ```text
-https://drive.google.com/drive/folders/<temporary-dataset-link>
+https://drive.google.com/drive/folders/1oxxWH3mHM2xiN-eWj-X_3C-GE3sa8dJe
 ```
 
 Extract the downloaded folders into `ACA_qPCR/`. The expected files include:
@@ -125,11 +125,10 @@ label column.
 
 ## Download Checkpoints
 
-Download pretrained BYOL and T-CDAN checkpoints from the temporary Google Drive
-link:
+Download pretrained BYOL and T-CDAN checkpoints from Google Drive:
 
 ```text
-https://drive.google.com/drive/folders/<temporary-checkpoint-link>
+https://drive.google.com/drive/folders/1oxxWH3mHM2xiN-eWj-X_3C-GE3sa8dJe?usp=drive_link
 ```
 
 Place the checkpoint files under the corresponding output folders:
