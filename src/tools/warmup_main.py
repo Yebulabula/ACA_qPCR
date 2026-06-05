@@ -99,7 +99,7 @@ if __name__ == "__main__":
     parser.add_argument('--method', type=str, default='CDAN+E', choices=['CDAN', 'CDAN+E', 'DANN'])
     parser.add_argument('--num_iterations', type=int, default=30)
     parser.add_argument('--test_interval', type=int, default=20, help="interval of two continuous test phase")
-    parser.add_argument('--dir_data', type=str, default='/mnt/new_drive/Documents/qPCR/byol-pytorch', help="directory of data")
+    parser.add_argument('--dir_data', type=str, default='7_plex', help="directory of data")
     parser.add_argument('--output_dir', type=str, default='log', help="output directory of our model (in ../snapshot directory)")
     parser.add_argument('--lr', type=float, default= 1e-3, help="learning rate")
     parser.add_argument('--random', type=bool, default= False, help="whether use random projection")

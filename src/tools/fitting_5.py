@@ -173,8 +173,8 @@ if __name__ == '__main__':
         warnings.simplefilter("ignore", FutureWarning)
     
     # Directories
-    dir_data = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\data\data_2025'
-    dir_out = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\out\fitting'
+    dir_data = '7_plex'
+    dir_out = os.path.join('7_plex_output', 'fitting')
     
     # Create output directory if it doesn't exist
     os.makedirs(dir_out, exist_ok=True)

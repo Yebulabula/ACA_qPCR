@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 # root.mainloop()
 
 # Define the path to the saved training curve file
-dir_out = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\out'
+dir_out = '7_plex_output'
 training_curve_file = os.path.join(dir_out, "training_curve.pkl")
 
 # Load the training_curve dictionary from the saved file

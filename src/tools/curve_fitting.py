@@ -6,8 +6,8 @@ import multiprocessing
 import matplotlib.pyplot as plt
 
 # Directories
-dir_data_2025 = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\data\data_2025'
-dir_out = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\out\BYOL_CDAN'
+dir_data_2025 = '7_plex'
+dir_out = '7_plex_output'
 
 # Load data
 df = pd.read_csv(os.path.join(dir_data_2025, 'df_dPCR_SP_2025.csv'))  # Adjust filename if needed

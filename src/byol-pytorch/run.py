@@ -13,7 +13,7 @@ import tqdm
 from sklearn.preprocessing import StandardScaler
 import os
 
-dir_data = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\data\data_2025'
+dir_data = '7_plex'
 
 if __name__ == '__main__':
 

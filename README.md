@@ -167,7 +167,7 @@ python BYOL_CDAN_7_plex.py \
 ```
 
 Useful options include `--num_iterations`, `--test_interval`, `--batch_size`,
-`--lr`, `--weight_decay`, `--trade_off`, `--dir`, `--dir_out`, and
+`--lr`, `--weight_decay`, `--trade_off`, `--dir_data`, `--dir_out`, and
 `--wandb`.
 
 ## Evaluation

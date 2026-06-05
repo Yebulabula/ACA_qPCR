@@ -1,8 +1,8 @@
 import sys
 import os
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SRC_DIR = os.path.join(BASE_DIR, 'src')
+PROJECT_DIR = os.path.dirname(__file__) or '.'
+SRC_DIR = os.path.join(PROJECT_DIR, 'src')
 sys.path.insert(0, SRC_DIR)
 sys.path.insert(0, os.path.join(SRC_DIR, 'byol-pytorch'))
 
@@ -33,9 +33,9 @@ from byol_cdan_common import (
 )
 
 
-dir_data_2025 = os.path.join(BASE_DIR, '7_plex_data')
-dir_out = os.path.join(BASE_DIR, '7_plex_output')
-PRETRAINED_BYOL_CHECKPOINT = os.path.join(BASE_DIR, "output", "4.3.7_plex_best_byol_qPCR.pth")
+dir_data_2025 = os.path.join(PROJECT_DIR, '7_plex')
+dir_out = os.path.join(PROJECT_DIR, '7_plex_output')
+PRETRAINED_BYOL_CHECKPOINT = os.path.join(PROJECT_DIR, "output", "4.3.7_plex_best_byol_qPCR.pth")
 PRETRAINED_CL_CHECKPOINT = os.path.join(dir_out, "pretrained_model_CL_final.pth")
 PARAMS_CSV_PATH = os.path.join(dir_data_2025, "param_df_5_20250305_2248.csv")
 

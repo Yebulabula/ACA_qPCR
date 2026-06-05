@@ -625,6 +625,7 @@ def load_matching_state_dict(model, checkpoint_path, device, strip_prefixes=Fals
 
 def train_BYOL(config, transformer_model, device, run_context, f_config, image_size, cl_slice, params_csv_path, augment_fn):
     from byol_pytorch import BYOL
+    from tqdm.auto import tqdm
 
     df_curves_cl = pd.read_csv(
         os.path.join(config["data"]["dir_data"], config["data"]["CL"]["name"][0])
@@ -685,7 +686,14 @@ def train_BYOL(config, transformer_model, device, run_context, f_config, image_s
     for epoch in range(config["epochs_CL"]):
         avg_loss = 0.0
         learner.train()
-        for i, (x, y) in enumerate(train_loader_cl):
+        epoch_num = epoch + 1
+        train_bar = tqdm(
+            train_loader_cl,
+            desc=f"BYOL train {epoch_num}/{config['epochs_CL']}",
+            leave=False,
+            dynamic_ncols=True,
+        )
+        for i, (x, y) in enumerate(train_bar):
             global_step += 1
             x, y = x.to(device), y.to(device)
             loss = learner(x, y)
@@ -704,18 +712,41 @@ def train_BYOL(config, transformer_model, device, run_context, f_config, image_s
                 },
                 step=global_step,
             )
+            train_bar.set_postfix(
+                loss=f"{loss.item():.6f}",
+                avg=f"{avg_loss / (i + 1):.6f}",
+                lr=f"{get_current_lr(opt):.2e}",
+            )
 
         avg_loss /= (i + 1)
         learner.eval()
         val_loss = 0.0
         with torch.no_grad():
-            for x_val, y_val in val_loader_cl:
+            val_bar = tqdm(
+                val_loader_cl,
+                desc=f"BYOL val {epoch_num}/{config['epochs_CL']}",
+                leave=False,
+                dynamic_ncols=True,
+            )
+            for val_i, (x_val, y_val) in enumerate(val_bar):
                 x_val, y_val = x_val.to(device), y_val.to(device)
                 batch_val_loss = learner(x_val, y_val)
                 val_loss += batch_val_loss.item()
+                val_bar.set_postfix(
+                    loss=f"{batch_val_loss.item():.6f}",
+                    avg=f"{val_loss / (val_i + 1):.6f}",
+                )
         val_loss /= max(1, len(val_loader_cl))
 
-        logging.info("BYOL Epoch %s, Train Loss: %.6f, Val Loss: %.6f", epoch, avg_loss, val_loss)
+        epoch_message = (
+            f"BYOL Epoch {epoch_num}/{config['epochs_CL']} | "
+            f"train_loss={avg_loss:.6f} | "
+            f"val_loss={val_loss:.6f} | "
+            f"lr={get_current_lr(opt):.8f} | "
+            f"steps={global_step}"
+        )
+        print(epoch_message, flush=True)
+        logging.info(epoch_message)
         maybe_log_wandb(
             config,
             {
@@ -724,13 +755,13 @@ def train_BYOL(config, transformer_model, device, run_context, f_config, image_s
                 "byol/lr": get_current_lr(opt),
                 "byol/global_step": global_step,
             },
-            step=epoch + 1,
+            step=epoch_num,
         )
 
         pretrained_model = learner.online_encoder.net
 
-        if (epoch + 1) % 20 == 0:
-            model_path = os.path.join(run_context.run_output_dir, f"pretrained_model_CL_epoch_{epoch + 1}.pth")
+        if epoch_num % 20 == 0:
+            model_path = os.path.join(run_context.run_output_dir, f"pretrained_model_CL_epoch_{epoch_num}.pth")
             save_checkpoint(
                 pretrained_model,
                 model_path,
@@ -738,11 +769,11 @@ def train_BYOL(config, transformer_model, device, run_context, f_config, image_s
                 run_context,
                 model_name="byol_contrastive",
                 best_metric={"train_loss": float(avg_loss), "val_loss": float(val_loss)},
-                step=epoch + 1,
+                step=epoch_num,
             )
             logging.info(
                 "BYOL Epoch %s: Periodic checkpoint saved to %s (train_loss=%.6f, val_loss=%.6f)",
-                epoch,
+                epoch_num,
                 model_path,
                 avg_loss,
                 val_loss,

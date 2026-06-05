@@ -35,8 +35,8 @@ plt.ion()
 from pathlib import Path
 
 
-dir_data_2025 = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\data\data_2025'
-dir_out = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\out'
+dir_data_2025 = '7_plex'
+dir_out = '7_plex_output'
 
 def eval_best_model(best_model, data_loaders, Activities, save_name, mode = 'test'): 
     """

@@ -6,18 +6,20 @@ import pandas as pd
 import numpy as np
 import sys
 
-dir_scr =  r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\scr'
+dir_scr = os.path.join('src', 'tools')
 if dir_scr not in sys.path:
     sys.path.append(dir_scr)
 
-with open(os.path.join(dir_scr, 'DEEP_ACA_LK_functions_v2.py')) as f:
-    code = f.read()
-exec(code)
+helper_path = os.path.join(dir_scr, 'DEEP_ACA_LK_functions_v2.py')
+if os.path.exists(helper_path):
+    with open(helper_path) as f:
+        code = f.read()
+    exec(code)
 
 ## experimental data
 
-dir_data_2025 = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\data\data_2025'
-dir_out = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\data\out'
+dir_data_2025 = '7_plex'
+dir_out = '7_plex_output'
 
 df_qPCR_GB_2025 = pd.read_csv(os.path.join(dir_data_2025, "df_qPCR_GB_2025.csv"))
 df_qPCR_SP_2025 = pd.read_csv(os.path.join(dir_data_2025, "df_qPCR_SP_2025.csv"))

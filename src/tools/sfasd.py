@@ -7,8 +7,8 @@ import multiprocessing
 import matplotlib.pyplot as plt
 
 # Directories
-dir_data_2025 = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\data\data_2025'
-dir_out = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\out\BYOL_CDAN'
+dir_data_2025 = '7_plex'
+dir_out = '7_plex_output'
 
 # Ensure output directory exists
 os.makedirs(dir_out, exist_ok=True)

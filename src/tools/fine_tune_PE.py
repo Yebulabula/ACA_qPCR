@@ -22,8 +22,8 @@ from torch.autograd import Variable
 from utils import split_data_labels
 
 # Define directories
-dir_data_2025 = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\data\data_2025'
-dir_out = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\out'
+dir_data_2025 = '7_plex'
+dir_out = '7_plex_output'
 
 # Configure device
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

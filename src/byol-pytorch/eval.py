@@ -15,7 +15,7 @@ len_seq = 60
 d_model = 512
 class_num = 7
 
-dir_data = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\data\data_2025'
+dir_data = '7_plex'
 # class classifier_model(nn.Module):
     
 #     def __init__(self, model):

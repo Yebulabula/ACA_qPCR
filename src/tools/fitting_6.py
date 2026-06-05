@@ -246,8 +246,8 @@ if __name__ == '__main__':
         warnings.simplefilter("ignore", FutureWarning)
     
     # Directories
-    dir_data_2025 = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\data\data_2025'
-    dir_out = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\out\BYOL_CDAN'
+    dir_data = '7_plex'
+    dir_out = '7_plex_output'
     
     # Create output directory if it doesn't exist
     os.makedirs(dir_out, exist_ok=True)

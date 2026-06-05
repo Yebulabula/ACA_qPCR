@@ -38,8 +38,8 @@ from tst.encoder import Encoder
 from tst.utils import generate_original_PE, generate_regular_PE
 
 
-dir_data = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\data\data_2025'
-dir_out = r'C:\Users\louis_kreitmann\DEEP_ACA_7plex_cluster\out'
+dir_data = '7_plex'
+dir_out = '7_plex_output'
 
 # parser = argparse.ArgumentParser(description='Conditional Domain Adversarial Network')
 # parser.add_argument('--method', type=str, default='CDAN+E', choices=['CDAN', 'CDAN+E', 'DANN'])
