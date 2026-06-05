@@ -1,8 +1,10 @@
 import sys
 import os
 
-sys.path.append(os.getcwd())
-sys.path.append(os.path.join('byol-pytorch'))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SRC_DIR = os.path.join(BASE_DIR, 'src')
+sys.path.insert(0, SRC_DIR)
+sys.path.insert(0, os.path.join(SRC_DIR, 'byol-pytorch'))
 
 import argparse
 import logging
@@ -31,11 +33,11 @@ from byol_cdan_common import (
 )
 
 
-dir_data_2025 = '../7_plex_data'
-dir_out = '7_plex_output'
-PRETRAINED_BYOL_CHECKPOINT = "output/4.3.7_plex_best_byol_qPCR.pth"
-PRETRAINED_CL_CHECKPOINT = "7_plex_output/CL_checkpoints/pretrained_model_CL_epoch_100.pth"
-PARAMS_CSV_PATH = "../7_plex_data/param_df_5_20250305_2248.csv"
+dir_data_2025 = os.path.join(BASE_DIR, '7_plex_data')
+dir_out = os.path.join(BASE_DIR, '7_plex_output')
+PRETRAINED_BYOL_CHECKPOINT = os.path.join(BASE_DIR, "output", "4.3.7_plex_best_byol_qPCR.pth")
+PRETRAINED_CL_CHECKPOINT = os.path.join(dir_out, "pretrained_model_CL_final.pth")
+PARAMS_CSV_PATH = os.path.join(dir_data_2025, "param_df_5_20250305_2248.csv")
 
 
 def str2bool(value):
@@ -91,6 +93,7 @@ if __name__ == "__main__":
     parser.add_argument('--wandb_entity', type=str, default=None, help="wandb entity/team name")
     parser.add_argument('--wandb_run_name', type=str, default=None, help="optional wandb run name")
     parser.add_argument('--wandb_mode', type=str, default='online', choices=['online', 'offline', 'disabled'], help="wandb mode")
+    parser.add_argument('--pretrained_cl_checkpoint', type=str, default=PRETRAINED_CL_CHECKPOINT, help="path to the BYOL contrastive checkpoint used to initialize T-CDAN")
     parser.add_argument('--eval_checkpoint', type=str, default=None, help="optional classifier checkpoint to evaluate without training")
     parser.add_argument('--eval_split', type=str, default='test', choices=['source', 'target', 'test'], help="dataset split to use for checkpoint-only evaluation")
     args, _ = parser.parse_known_args()
@@ -172,7 +175,7 @@ if __name__ == "__main__":
         F_config,
         run_context,
         PRETRAINED_BYOL_CHECKPOINT,
-        PRETRAINED_CL_CHECKPOINT,
+        args.pretrained_cl_checkpoint,
         "byol-cdan-7-plex",
     )
 
@@ -275,7 +278,7 @@ if __name__ == "__main__":
             run_context,
             F_config,
             image_size=60,
-            pretrained_cl_checkpoint=PRETRAINED_CL_CHECKPOINT,
+            pretrained_cl_checkpoint=args.pretrained_cl_checkpoint,
         )
         byol_cdan_metrics = eval_best_model(
             byol_cdan_best_model, data_loaders, activities, 'BYOL_CDAN', device, run_context, 'test', config=config

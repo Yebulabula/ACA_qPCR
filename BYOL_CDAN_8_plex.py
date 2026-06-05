@@ -1,8 +1,10 @@
 import sys
 import os
 
-sys.path.append(os.getcwd())
-sys.path.append(os.path.join('byol-pytorch'))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SRC_DIR = os.path.join(BASE_DIR, 'src')
+sys.path.insert(0, SRC_DIR)
+sys.path.insert(0, os.path.join(SRC_DIR, 'byol-pytorch'))
 
 import argparse
 import logging
@@ -31,11 +33,11 @@ from byol_cdan_common import (
 )
 
 
-dir_data_2025 = '../8_plex_data'
-dir_out = '8_plex_output'
-PRETRAINED_BYOL_CHECKPOINT = "output/4.3.8_plex_best_byol_qPCR.pth"
-PRETRAINED_CL_CHECKPOINT = "8_plex_output/CL_checkpoints/pretrained_model_CL_epoch_280.pth"
-PARAMS_CSV_PATH = "/mnt/new_drive/Documents/for_Ye/8_plex_data/params_df_5_spline_total.csv"
+dir_data_2025 = os.path.join(BASE_DIR, '8_plex_data')
+dir_out = os.path.join(BASE_DIR, '8_plex_output')
+PRETRAINED_BYOL_CHECKPOINT = os.path.join(BASE_DIR, "output", "4.3.8_plex_best_byol_qPCR.pth")
+PRETRAINED_CL_CHECKPOINT = os.path.join(dir_out, "pretrained_model_CL_final.pth")
+PARAMS_CSV_PATH = os.path.join(dir_data_2025, "params_df_5_spline_total.csv")
 
 
 def str2bool(value):
@@ -93,7 +95,7 @@ if __name__ == "__main__":
     parser.add_argument('--wandb_entity', type=str, default=None, help="wandb entity/team name")
     parser.add_argument('--wandb_run_name', type=str, default=None, help="optional wandb run name")
     parser.add_argument('--wandb_mode', type=str, default='online', choices=['online', 'offline', 'disabled'], help="wandb mode")
-    parser.add_argument('--pretrained_cl_checkpoint', type=str, default=PRETRAINED_CL_CHECKPOINT, help="path to the BYOL contrastive checkpoint used to initialize BYOL+CDAN")
+    parser.add_argument('--pretrained_cl_checkpoint', type=str, default=PRETRAINED_CL_CHECKPOINT, help="path to the BYOL contrastive checkpoint used to initialize T-CDAN")
     parser.add_argument('--eval_checkpoint', type=str, default=None, help="optional classifier checkpoint to evaluate without training")
     parser.add_argument('--eval_split', type=str, default='test', choices=['source', 'target', 'test'], help="dataset split to use for checkpoint-only evaluation")
     args, _ = parser.parse_known_args()
