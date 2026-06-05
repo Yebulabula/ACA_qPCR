@@ -105,19 +105,7 @@ Download the dataset from Google Drive:
 https://drive.google.com/drive/folders/1oxxWH3mHM2xiN-eWj-X_3C-GE3sa8dJe
 ```
 
-Extract the downloaded folders into `ACA_qPCR/`. The expected files include:
-
-- `7_plex/df_qPCR_GB_2025.csv`
-- `7_plex/df_dPCR_GB_2025.csv`
-- `7_plex/df_dPCR_SP_2025.csv`
-- `7_plex/param_df_5_20250305_2248.csv`
-- `8_plex/df_8plex_CNS_qPCR_GB.csv`
-- `8_plex/df_8plex_CNS_qPCR_SP.csv`
-- `8_plex/df_8plex_CNS_dPCR_total.csv`
-- `8_plex/params_df_5_spline_total.csv`
-
-Each curve CSV should contain numeric qPCR curve columns and a `Target_cat`
-label column.
+Extract the downloaded folders into `ACA_qPCR/`. 
 
 ## Download Models
 
