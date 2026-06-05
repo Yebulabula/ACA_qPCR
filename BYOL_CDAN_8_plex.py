@@ -5,566 +5,107 @@ sys.path.append(os.getcwd())
 sys.path.append(os.path.join('byol-pytorch'))
 
 import argparse
-import datetime
 import logging
-import tqdm
-from torch.utils.data import DataLoader
-
 import warnings
 
-import lr_schedule
-import matplotlib
-import network
 import numpy as np
-import pandas as pd
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from basenetwork_8_plex import Transformer_for_byol
-from byol_pytorch import BYOL
 from tools.data_loader import generate_data_loader
-from loss import CDAN, DANN, Entropy
-from sklearn.metrics import (
-    ConfusionMatrixDisplay,
-    classification_report,
-    confusion_matrix,
+
+from byol_cdan_common import (
+    build_domain_adversary,
+    configure_logging,
+    create_run_context,
+    eval_best_model,
+    finalize_run,
+    load_matching_state_dict,
+    maybe_init_wandb,
+    post_train_BYOL_CDAN,
+    save_checkpoint,
+    save_json,
+    train_BYOL,
+    train_CDAN,
+    train_baseline,
 )
-from torch.utils.data import Dataset
-
-matplotlib.use('Agg')  # Use non-GUI backend suitable for headless environments
-import matplotlib.pyplot as plt
-
-plt.ion()
 
 
-# Directories
 dir_data_2025 = '../8_plex_data'
 dir_out = '8_plex_output'
 PRETRAINED_BYOL_CHECKPOINT = "output/4.3.8_plex_best_byol_qPCR.pth"
-PRETRAINED_CL_CHECKPOINT = "output/20250416_152708/pretrained_model_CL_200.pth"
+PRETRAINED_CL_CHECKPOINT = "8_plex_output/CL_checkpoints/pretrained_model_CL_epoch_280.pth"
+PARAMS_CSV_PATH = "/mnt/new_drive/Documents/for_Ye/8_plex_data/params_df_5_spline_total.csv"
 
-# Ensure output directory exists
-os.makedirs(dir_out, exist_ok=True)
 
-# Create a timestamp for this run
-timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-log_file = os.path.join(dir_out, f'training_log_{timestamp}.txt')
+def str2bool(value):
+    if isinstance(value, bool):
+        return value
+    lowered = value.lower()
+    if lowered in {"true", "1", "yes", "y"}:
+        return True
+    if lowered in {"false", "0", "no", "n"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_file),
-        logging.StreamHandler()
-    ]
-)
 
-# Log the start of execution
-logging.info("Starting BYOL_CDAN training. Logs saved to: %s", log_file)
-
-def eval_best_model(best_model, data_loaders, activities, save_name, device, mode='test'):
-    logging.info("-------Curve-level performance evaluation-------")
-    best_model.eval()
-    best_model.to(device)
-    pred_list = torch.tensor([], device=device)
-    label_list = torch.tensor([], device=device)
-
-    with torch.no_grad():
-        for data, label in data_loaders[mode]:
-            data, label = data.to(device), label.to(device)
-            _, output, _ = best_model(data)
-            pred = output.data.max(1, keepdim=True)[1]
-            pred_list = torch.cat((pred_list, torch.flatten(pred)), 0)
-            label_list = torch.cat((label_list, torch.flatten(label)), 0)
-
-    report = classification_report(
-        label_list.cpu().numpy(),
-        pred_list.cpu().numpy(),
-        digits=5,
-        target_names=activities,
-    )
-    logging.info("\n%s", report)
-
-    y_true = label_list.cpu().numpy()
-    y_pred = pred_list.cpu().numpy()
-
-    cm = confusion_matrix(y_true, y_pred)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=activities)
-    disp.plot(cmap=plt.cm.Blues)
-    plt.title(f'Confusion Matrix - {save_name}')
-    cm_path = os.path.join(dir_out, f"confusion_matrix_{save_name}_{timestamp}.png")
-    plt.savefig(cm_path)
-    logging.info("Confusion matrix saved to: %s", cm_path)
-
-    return 100.0 * (y_pred == y_true).sum() / len(y_true)
-
-# Define sigmoid models
 def sigmoid5_spline_lin(x, Fm, Fb, Sc, Cs, As, a, b):
-    """5-parameter sigmoid model for PCR amplification curves with linear spline"""
-    # Use numpy.maximum to handle element-wise comparison correctly
-    sigmoid_part = Fm / (1. + np.exp(-(x-Cs)*Sc))**As + Fb
-    linear_part = np.maximum(0, a*x + b)
+    sigmoid_part = Fm / (1.0 + np.exp(-(x - Cs) * Sc)) ** As + Fb
+    linear_part = np.maximum(0, a * x + b)
     return sigmoid_part + linear_part
- 
- 
+
+
 def augment_fct(params_df, idx, sigmoid_fn=sigmoid5_spline_lin):
     param_cols = ['Fm', 'Fb', 'Sc', 'Cs', 'As', 'a', 'b']
     params = params_df.loc[idx, param_cols]
-    
-    param_to_change = str('Cs')
     params_aug = params.copy()
-    
+
     mean = 24.835403682791412
     sigma = 8.098645591811588
-
     dist = np.random.normal(loc=mean, scale=sigma, size=len(params_df))
-    params_aug[param_to_change] = np.random.choice(dist)
+    params_aug['Cs'] = np.random.choice(dist)
     x = np.arange(1, 50 + 1)
-    y_aug = sigmoid_fn(x, *params_aug)
-    return y_aug
-
-def test(model, data_loader, iter, device):
-    model.eval()
-    test_loss = 0
-    correct_class = 0
-
-    with torch.no_grad():
-        for data, label in data_loader:
-            data, label = data.to(device), label.to(device)
-            _, output, _ = model(data)
-            pred = output.data.max(1, keepdim=True)[1]
-            correct_class += pred.eq(label.data.view_as(pred)).cpu().sum()
-
-    test_loss = test_loss / len(data_loader.dataset)
-    accuracy = 100.0 * correct_class / len(data_loader.dataset)
-    logging.info(f"Test iteration {iter}: Accuracy = {accuracy:.2f}%")
-
-    return {
-        "iter": iter,
-        "average_loss": test_loss,
-        "correct_class": correct_class,
-        "total_elems": len(data_loader.dataset),
-        "accuracy %": accuracy,
-    }
-    
-# import matplotlib.pyplot as plt
-class PCRDataset_2(Dataset):
-    def __init__(self, df_CL, dir_data, params_df):
-        self.df_CL = df_CL
-        self.params_df = pd.read_csv(params_df, index_col=0).dropna()
-        self.dir_data = dir_data
-
-    def __len__(self):
-        return len(self.df_CL)
-
-    def __getitem__(self, idx):
-        # Return the normalized curves
-        c1 = augment_fct(self.params_df, idx, sigmoid_fn=sigmoid5_spline_lin)
-        c2 = augment_fct(self.params_df, idx, sigmoid_fn=sigmoid5_spline_lin)
-        
-        # baseline = self.df_CL.iloc[idx]
-        # # draw the curves for visualization
-        # plt.figure()
-        # plt.plot(c1, label='Augmented Curve 1')
-        # plt.plot(c2, label='Augmented Curve 2')
-        # plt.plot(baseline, label='Original Curve', linestyle='dashed')
-        # plt.title(f'Augmented Curves for Sample {idx}')
-        # plt.xlabel('Cycle')
-        # plt.ylabel('Fluorescence')
-        # plt.legend()
-        # curve_path = os.path.join(self.dir_data, f"augmented_curves_sample_{idx}.png")
-        # plt.savefig(curve_path)
-        return c1, c2
-    
-    def get_original_data(self, idx):
-        """Return original non-normalized data"""
-        return self.df_CL.iloc[idx]
-    
-class FocalLoss(nn.Module):
-    def __init__(self, alpha=None, gamma=2.0, reduction="mean"):
-        super().__init__()
-        self.alpha = alpha  # Weight per class (optional)
-        self.gamma = gamma  # Focusing parameter
-        self.reduction = reduction
-
-    def forward(self, logits, targets):
-        ce_loss = nn.CrossEntropyLoss(weight=self.alpha, reduction="none")(logits, targets)
-        pt = torch.exp(-ce_loss)  # Probabilities of correct classes
-        focal_loss = (1 - pt) ** self.gamma * ce_loss  # Scale loss for well-classified examples
-
-        if self.reduction == "mean":
-            return focal_loss.mean()
-        elif self.reduction == "sum":
-            return focal_loss.sum()
-        return focal_loss
-    
-def train_baseline(config, base_network, data_loaders, device):
-    
-    parameter_list = base_network.get_parameters() 
-    optimizer_config = config["optimizer"]
-    optimizer = optimizer_config["type"](parameter_list, **(optimizer_config["optim_params"]))
-    schedule_param = optimizer_config["lr_param"]
-    lr_scheduler = lr_schedule.schedule_dict[optimizer_config["lr_type"]]
-    len_train_source = len(data_loaders["source"])
-    best_acc = 0.0
-    best_model = None
-    training_accuracy = []
-    testing_accuracy = []
-    classifier_loss_iter = []
-    iters = 0
-
-    for i in range(config["num_iterations"]):
-        base_network.train(True)
-        iters += 1
-        if i % config["test_interval"] == config["test_interval"] - 1:
-            base_network.train(False)
-            
-            # Evaluate on test data
-            test_target = test(base_network, data_loaders["test"], i, device)
-            temp_acc = test_target['accuracy %']
-            temp_model = nn.Sequential(base_network)
-            
-            # Save best model if this iteration has better accuracy
-            if temp_acc > best_acc:
-                best_acc = temp_acc
-                best_model = temp_model
-                model_path = os.path.join(dir_out, f'baseline_best_model_{timestamp}.pth')
-                torch.save(best_model.state_dict(), model_path)
-                logging.info(f"New best baseline model saved with accuracy: {temp_acc:.2f}%")
-
-            # Log testing accuracy
-            testing_accuracy.append((i + 1, temp_acc))
-
-        optimizer = lr_scheduler(optimizer, i, **schedule_param)
-        optimizer.zero_grad()
-        # lr_scheduler.step()
-
-        if i % len_train_source == 0:
-            iter_source = iter(data_loaders["source"])
-
-        inputs_source, labels_source = next(iter_source)
-        inputs_source, labels_source = inputs_source.to(device), labels_source.to(device)
-        _, outputs_source, _ = base_network(inputs_source)
-        classifier_loss = nn.CrossEntropyLoss()(outputs_source, labels_source.long())
-        
-        # FIX: Use classifier_loss for backward instead of undefined total_loss
-        classifier_loss.backward()
-        optimizer.step()
-        classifier_loss_iter.append(classifier_loss.item())
-
-        # Compute training accuracy for the current batch
-        preds = outputs_source.argmax(dim=1)
-        train_acc = (preds == labels_source).float().mean().item()
-        training_accuracy.append((i + 1, train_acc))
-
-        # Log every 10 iterations to avoid too many logs
-        if (i+1) % 500 == 0:
-            logging.info(f'[Iter: {i+1}/{config["num_iterations"]}] Classification loss: {classifier_loss.item():.4f}')
-    
-    # Plot training and testing accuracy curves
-    logging.info("Baseline training complete! Plotting training curves...")
-    train_iters, train_acc = zip(*training_accuracy)
-    test_iters, test_acc = zip(*testing_accuracy)
-    train_acc_percentage = [x * 100 for x in train_acc]
-    plt.figure()
-    plt.plot(train_iters, train_acc_percentage, label="Training Accuracy (%)")
-    plt.plot(test_iters, test_acc, label="Testing Accuracy (%)")
-    plt.xlabel("Iterations")
-    plt.ylabel("Accuracy (%)")
-    plt.title("Training and Testing Accuracy Curves - Baseline")
-    plt.legend()
-    training_curve_path = os.path.join(dir_out, f"training_curve_baseline_model_{timestamp}.png")
-    plt.savefig(training_curve_path)
-    logging.info(f"Training curve saved to: {training_curve_path}")
-
-    return best_model
-
-def train_CDAN(config, CDAN_model, ad_net, random_layer, data_loaders, device):
-    logging.info("Starting CDAN training...")
-    parameter_list = CDAN_model.get_parameters() + ad_net.get_parameters()
-    optimizer_config = config["optimizer"]
-    optimizer = optimizer_config["type"](parameter_list, **(optimizer_config["optim_params"]))
-    schedule_param = optimizer_config["lr_param"]
-    lr_scheduler = lr_schedule.schedule_dict[optimizer_config["lr_type"]]
-    
-    
-    ## train   
-    len_train_source = len(data_loaders["source"])
-    len_train_target = len(data_loaders["target"])
-    best_acc = 0.0
-    best_model = None
-    training_accuracy = []
-    testing_accuracy = []
-    classifier_loss_iter = []
-    transfer_loss_iter = []
-    total_loss_iter = []
-    iters = 0
-
-    
-    for i in range(config["num_iterations"]):
-        CDAN_model.train(True)
-        iters += 1
-        if i % config["test_interval"] == config["test_interval"] - 1:
-            CDAN_model.train(False)
-            
-            # Evaluate on test data
-            
-            logging.info(f"Testing CDAN model on Train Data...")
-            test_target = test(CDAN_model, data_loaders["source"], i, device)
-            temp_acc = test_target['accuracy %']
-            temp_model = nn.Sequential(CDAN_model)
-            
-            logging.info(f"Testing CDAN model on Test Data...")
-            test_target = test(CDAN_model, data_loaders["test"], i, device)
-            temp_acc = test_target['accuracy %']
-            temp_model = nn.Sequential(CDAN_model)
-            
-            # Save best model if this iteration has better accuracy
-            if temp_acc > best_acc:
-                best_acc = temp_acc
-                best_model = temp_model
-                model_path = os.path.join(dir_out, f'best_model_CDAN_{timestamp}.pth')
-                torch.save(best_model.state_dict(), model_path)
-                logging.info(f"New best CDAN model saved with accuracy: {temp_acc:.2f}%")
-
-            # Log testing accuracy
-            testing_accuracy.append((i + 1, temp_acc))
-
-        loss_params = config["loss"]  
-        # lr_scheduler.step()
-        
-        
-        optimizer = lr_scheduler(optimizer, i, **schedule_param)
-        optimizer.zero_grad()
-
-        if i % len_train_source == 0:
-            iter_source = iter(data_loaders["source"])
-
-        if i % len_train_target == 0:
-            iter_target = iter(data_loaders["target"])
-        
-        inputs_source, labels_source = next(iter_source)
-        inputs_target, _= next(iter_target)
-        inputs_source, inputs_target, labels_source = inputs_source.to(device), inputs_target.to(device), labels_source.to(device)
-        
-        features_source, outputs_source, _ = CDAN_model(inputs_source)
-        features_target, outputs_target, _ = CDAN_model(inputs_target)
-        features = torch.cat((features_source, features_target), dim=0)
-        outputs = torch.cat((outputs_source, outputs_target), dim=0)
-        softmax_out = nn.Softmax(dim=1)(outputs)
-
-        if config['method'] == 'CDAN+E':           
-            entropy = Entropy(softmax_out)
-            _, transfer_loss = CDAN([features, softmax_out], ad_net, device, entropy, network.calc_coeff(i), random_layer)
-        elif config['method']  == 'CDAN':
-            _, transfer_loss = CDAN([features, softmax_out], ad_net, device, None, None, random_layer)
-        elif config['method']  == 'DANN':
-            _, transfer_loss = DANN(features, ad_net)
-        else:
-            raise ValueError('Method cannot be recognized.')
-
-        classifier_loss = nn.CrossEntropyLoss()(outputs_source, labels_source.long())
-        # print(classifier_loss)
-        # classifier_loss = FocalLoss(gamma=2.0)(outputs_source, labels_source.long())
-        total_loss = loss_params["trade_off"] * transfer_loss + classifier_loss
-        total_loss.backward()
-        optimizer.step()
-
-        classifier_loss_iter.append(classifier_loss.item())
-        transfer_loss_iter.append(transfer_loss.item())
-        total_loss_iter.append(total_loss.item())
-
-        # Compute training accuracy for current batch
-        preds = outputs_source.argmax(dim=1)
-        train_acc = (preds == labels_source).float().mean().item()
-        training_accuracy.append((i + 1, train_acc))
-
-        # Log every 10 iterations to avoid too many logs
-        if (i+1) % 200 == 0:
-            logging.info(f'[Iter: {i+1}/{config["num_iterations"]}] Classification loss: {classifier_loss.item():.4f}, ' +
-                         f'CDAN loss: {transfer_loss.item():.4f}, Total loss: {total_loss.item():.4f}')
-    
-    # Plot training and testing accuracy curves
-    logging.info("CDAN training complete! Plotting curves...")
-    
-    # Plot accuracy curves
-    train_iters, train_acc = zip(*training_accuracy)
-    test_iters, test_acc = zip(*testing_accuracy)
-    train_acc_percentage = [x * 100 for x in train_acc]
-    
-    plt.figure(figsize=(12, 5))
-    plt.subplot(1, 2, 1)
-    plt.plot(train_iters, train_acc_percentage, label="Training Accuracy (%)")
-    plt.plot(test_iters, test_acc, label="Testing Accuracy (%)")
-    plt.xlabel("Iterations")
-    plt.ylabel("Accuracy (%)")
-    plt.title("Training and Testing Accuracy - CDAN")
-    plt.legend()
-    
-    # Plot loss curves
-    plt.subplot(1, 2, 2)
-    plt.plot(range(1, iters+1), classifier_loss_iter, label="Classifier Loss")
-    plt.plot(range(1, iters+1), transfer_loss_iter, label="Transfer Loss")
-    plt.plot(range(1, iters+1), total_loss_iter, label="Total Loss")
-    plt.xlabel("Iterations")
-    plt.ylabel("Loss")
-    plt.title("CDAN Training Losses")
-    plt.legend()
-    
-    plt.tight_layout()
-    curves_path = os.path.join(dir_out, f"training_curves_CDAN_{timestamp}.png")
-    plt.savefig(curves_path)
-    logging.info(f"CDAN training curves saved to: {curves_path}")
-    
-    return best_model
-
-def build_domain_adversary(model, config, device):
-    if config["loss"]["random"]:
-        random_layer = network.RandomLayer(
-            [model.output_num(), config["class_num"]],
-            config["loss"]["random_dim"],
-            device,
-        ).to(device)
-        ad_net = network.AdversarialNetwork(config["loss"]["random_dim"], 256).to(device)
-    else:
-        random_layer = None
-        ad_net = network.AdversarialNetwork(
-            model.output_num() * config["class_num"], 256
-        ).to(device)
-    return random_layer, ad_net
-
-
-def strip_state_dict_prefixes(state_dict):
-    cleaned_state_dict = {}
-    for key, value in state_dict.items():
-        new_key = key.replace("0.", "", 1) if key.startswith("0.") else key
-        new_key = new_key.replace("module.", "", 1) if new_key.startswith("module.") else new_key
-        cleaned_state_dict[new_key] = value
-    return cleaned_state_dict
-
-
-def load_matching_state_dict(model, checkpoint_path, device, strip_prefixes=False):
-    state_dict = torch.load(checkpoint_path, map_location=device)
-    if strip_prefixes:
-        state_dict = strip_state_dict_prefixes(state_dict)
-
-    model_state = model.state_dict()
-    filtered_state = {
-        key: value
-        for key, value in state_dict.items()
-        if key in model_state and value.shape == model_state[key].shape
-    }
-    model_state.update(filtered_state)
-    model.load_state_dict(model_state)
-    logging.info("Loaded %s matching tensors from %s", len(filtered_state), checkpoint_path)
-
-def train_BYOL_CDAN(config, transformer_model, device):
-    """
-    First train with BYOL contrastive learning, then fine-tune with CDAN
-    """
-    # Step 1: Prepare data for contrastive learning
-    # logging.info("Preparing data for contrastive learning...")
-    df_curves_CL = pd.read_csv(os.path.join(config['data']['dir_data'], config['data']['CL']['name'][0])).iloc[:, 3:53]
-    
-    dataset = PCRDataset_2(df_curves_CL, config['data']['dir_data'], '/mnt/new_drive/Documents/for_Ye/8_plex_data/params_df_5_spline_total.csv')
-    train_loader_CL = DataLoader(dataset, batch_size=config['data']['CL']['batch_size'], shuffle=True)
-    logging.info(f"Prepared contrastive learning dataset with {len(dataset)} samples")
-
-    # Step 2: Setup BYOL learner
-    logging.info("Setting up BYOL learner...")
-    learner = BYOL(
-        transformer_model,
-        image_size=50,
-        hidden_layer='avgpool',
-        config=config,
-        F_config=F_config
-    ).to(device)
-
-    # Step 3: Train with BYOL (contrastive learning)
-    logging.info("Starting contrastive learning training...")
-    opt = torch.optim.Adam(learner.parameters(), lr=3e-5, weight_decay=0.0001)
-    best_loss = np.inf
-    cl_log = {'train_loss': []}
-    pretrained_model = None
-
-    for epoch in range(config['epochs_CL']):
-        avg_loss = 0
-        for i, (x, y) in enumerate(tqdm.tqdm(train_loader_CL)):
-            x, y = x.to(device), y.to(device)
-            loss = learner(x, y)
-            cl_log['train_loss'].append(loss.item())
-            avg_loss += loss.item()
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-            learner.update_moving_average()
-        avg_loss /= (i + 1)
-        logging.info(f'BYOL Epoch {epoch}, Avg Loss: {avg_loss:.6f}')
-        
-        if avg_loss < best_loss:
-            best_loss = avg_loss
-            pretrained_model = learner.online_encoder.net
-            model_path = os.path.join(dir_out, f'pretrained_model_CL_{timestamp}.pth')
-            torch.save(pretrained_model.state_dict(), model_path)
-            logging.info(f'BYOL Epoch {epoch}: Model saved to {model_path} with loss {avg_loss:.6f}')
-        
-        if (epoch + 1) % 50 == 0:
-            logging.info(f'BYOL Epoch {epoch}, Avg Loss: {avg_loss:.6f}, Best Loss: {best_loss:.6f}')
-            pretrained_model = learner.online_encoder.net
-            model_path = os.path.join(dir_out, f'pretrained_model_CL_{timestamp}.pth')
-            torch.save(pretrained_model.state_dict(), model_path)
-            logging.info(f'BYOL Epoch {epoch}: Model saved to {model_path} with loss {avg_loss:.6f}')
-            
-    return pretrained_model
-
-
-# def train_BYOL_CDAN(config, transformer_model, data_loaders, device):
-#     """First initialize the encoder with BYOL weights, then fine-tune with CDAN."""
-#     logging.info("Preparing BYOL+CDAN training...")
-#     os.makedirs(os.path.join(dir_out, timestamp), exist_ok=True)
-
-#     learner = BYOL(
-#         transformer_model,
-#         image_size=50,
-#         hidden_layer='avgpool',
-#         config=config,
-#         F_config=F_config,
-#     ).to(device)
-
-#     logging.info("Initializing BYOL optimizer...")
-#     _ = LARS(learner.parameters(), lr=0.01, momentum=0.9, weight_decay=1.5e-6)
-
-#     pretrained_model = learner.online_encoder.net
-#     load_matching_state_dict(pretrained_model, PRETRAINED_CL_CHECKPOINT, device)
-
-#     cdan_model = pretrained_model.to(device).train(True)
-#     random_layer, ad_net = build_domain_adversary(cdan_model, config, device)
-#     return train_CDAN(config, cdan_model, ad_net, random_layer, data_loaders, device)
+    return sigmoid_fn(x, *params_aug)
 
 
 if __name__ == "__main__":
-    # Parse command line arguments
     warnings.filterwarnings("ignore")
     parser = argparse.ArgumentParser(description='Conditional Domain Adversarial Network')
-    parser.add_argument('--method', type=str, default='CDAN+E', choices=['CDAN', 'CDAN+E', 'DANN'])
+    parser.add_argument('--method', type=str, default='CDAN', choices=['CDAN', 'CDAN+E', 'DANN'])
     parser.add_argument('--num_iterations', type=int, default=10000)
     parser.add_argument('--test_interval', type=int, default=500, help="interval of two continuous test phase")
     parser.add_argument('--dir_data', type=str, default=dir_data_2025, help="directory of data")
-    parser.add_argument('--dir_out', type=str, default=dir_out, help="output directory of our model (in ../snapshot directory)")
+    parser.add_argument('--dir_out', type=str, default=dir_out, help="output directory of our model")
     parser.add_argument('--lr', type=float, default=1e-4, help="learning rate")
-    parser.add_argument('--random', type=bool, default=False, help="whether use random projection")
-    parser.add_argument('--run_baseline', type=bool, default=False, help="whether to run baseline model training")
-    parser.add_argument('--run_cdan', type=bool, default=False, help="whether to run CDAN model training")
-    parser.add_argument('--run_byol_cdan', type=bool, default=True, help="whether to run BYOL+CDAN model training")
+    parser.add_argument('--batch_size', type=int, default=96, help="batch size for source/target/test training loaders")
+    parser.add_argument('--weight_decay', type=float, default=1e-6, help="optimizer weight decay")
+    parser.add_argument('--trade_off', type=float, default=2.0, help="domain adaptation trade-off weight")
+    parser.add_argument('--optimizer_type', type=str, default='adam', choices=['adam', 'adamw'], help="optimizer for baseline/CDAN training")
+    parser.add_argument('--train_warmup_steps', type=int, default=500, help="warmup steps for baseline/CDAN scheduler")
+    parser.add_argument('--train_min_lr_scale', type=float, default=0.05, help="minimum lr scale for baseline/CDAN scheduler")
+    parser.add_argument('--random', type=str2bool, default=False, help="whether use random projection")
+    parser.add_argument('--run_cl', type=str2bool, default=False, help="whether to run BYOL contrastive learning pretraining only")
+    parser.add_argument('--run_baseline', type=str2bool, default=False, help="whether to run baseline model training")
+    parser.add_argument('--run_cdan', type=str2bool, default=False, help="whether to run CDAN model training")
+    parser.add_argument('--run_byol_cdan', type=str2bool, default=False, help="whether to run BYOL+CDAN model training")
+    parser.add_argument('--wandb', action='store_true', help="enable Weights & Biases logging")
+    parser.add_argument('--wandb_project', type=str, default='byol-cdan-8-plex', help="wandb project name")
+    parser.add_argument('--wandb_entity', type=str, default=None, help="wandb entity/team name")
+    parser.add_argument('--wandb_run_name', type=str, default=None, help="optional wandb run name")
+    parser.add_argument('--wandb_mode', type=str, default='online', choices=['online', 'offline', 'disabled'], help="wandb mode")
+    parser.add_argument('--pretrained_cl_checkpoint', type=str, default=PRETRAINED_CL_CHECKPOINT, help="path to the BYOL contrastive checkpoint used to initialize BYOL+CDAN")
+    parser.add_argument('--eval_checkpoint', type=str, default=None, help="optional classifier checkpoint to evaluate without training")
+    parser.add_argument('--eval_split', type=str, default='test', choices=['source', 'target', 'test'], help="dataset split to use for checkpoint-only evaluation")
     args, _ = parser.parse_known_args()
-    
-    logging.info(f"Arguments: {args}")
+
+    run_context = create_run_context(args.dir_out, use_timestamp_subdir=False, write_log_file=False)
+    configure_logging(run_context)
+    logging.info("Arguments: %s", args)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    logging.info(f'Device for training: {device}')
-    
-    # ================= Configuration Setup ================ #
+    logging.info('Device for training: %s', device)
+    optimizer_type = optim.Adam if args.optimizer_type == 'adam' else optim.AdamW
+
     config = {
         "method": args.method,
         "N_seq": 50,
@@ -572,122 +113,194 @@ if __name__ == "__main__":
         "epochs_CL": 300,
         "test_interval": args.test_interval,
         "dir_out": args.dir_out,
-        "loss": {"trade_off": 1.0, "random": args.random, "random_dim": 512},
-        "optimizer": {"type":optim.AdamW, "optim_params":{'lr':args.lr, \
-                            "weight_decay":0.0001}, "lr_type":"inv", \
-                            "lr_param":{"lr":args.lr, "gamma":0.001, "power":0.75}},
+        "loss": {"trade_off": args.trade_off, "random": args.random, "random_dim": 512},
+        "optimizer": {"type": optimizer_type, "optim_params": {'lr': args.lr, "weight_decay": args.weight_decay}, "lr_type": "inv",
+                      "lr_param": {"lr": args.lr, "gamma": 0.001, "power": 0.75}},
+        "train_scheduler": {
+            "warmup_steps": args.train_warmup_steps,
+            "min_lr_scale": args.train_min_lr_scale,
+        },
+        "cl_optimizer": {
+            "lr": 2e-4,
+            "weight_decay": 1e-4,
+            "betas": (0.9, 0.999),
+            "warmup_steps": 100,
+            "min_lr_scale": 0.02,
+        },
         "data": {"dir_data": args.dir_data,
-                "source":{"name": ['df_8plex_CNS_qPCR_GB.csv'], "batch_size":128},
-                "target":{"name": "df_8plex_CNS_qPCR_SP.csv", "batch_size":128},
-                "test":{"name": "df_8plex_CNS_qPCR_SP.csv", "batch_size":128},
-                "CL": {"name": ["df_8plex_CNS_dPCR_total.csv"], "batch_size":2048}, 
-                "normalize": "min_max"},
-        "class_num": 8
+                 "source": {"name": ['df_8plex_CNS_qPCR_GB.csv'], "batch_size": args.batch_size},
+                 "target": {"name": "df_8plex_CNS_qPCR_SP.csv", "batch_size": args.batch_size},
+                 "test": {"name": "df_8plex_CNS_qPCR_SP.csv", "batch_size": args.batch_size},
+                 "CL": {"name": ["df_8plex_CNS_dPCR_total.csv"], "batch_size": 1024},
+                 "normalize": "min_max"},
+        "class_num": 8,
+        "wandb": {
+            "enabled": bool(args.wandb and args.wandb_mode != 'disabled'),
+            "project": args.wandb_project,
+            "entity": args.wandb_entity,
+            "run_name": args.wandb_run_name,
+            "mode": args.wandb_mode,
+            "tags": [args.method.lower(), "8-plex"],
+        },
+        "checkpoint_names": {
+            "baseline": "baseline.pth",
+            "cdan": "cdan.pth",
+            "byol_cdan": "byol_cdan.pth",
+        },
     }
 
-    # ================= Transformer Setup ================ #
     F_config = {
         'd_input': 1,
-        'd_model': 128, # Lattent dim
-        'q': 8, # Query size
-        'v': 8,  # Value size
-        'h': 4, # Number of self-attention heads
-        'N': 4, # Number of encoder to stack
-        'attention_size': None,  # Attention window size
-        'dropout': 0.3, # drop out rate
+        'd_model': 128,
+        'q': 8,
+        'v': 8,
+        'h': 4,
+        'N': 4,
+        'attention_size': None,
+        'dropout': 0.3,
         'chunk_mode': None,
-        'pe': "regular",  # Positional encoding metric
+        'pe': "regular",
         'pe_period': 20,
         'use_bottleneck': True,
         "bottleneck_dim": 256
     }
 
-    # Log configurations
-    logging.info("CDAN Configuration: " + str(config))
-    logging.info("Transformer Configuration: " + str(F_config))
-
+    logging.info("CDAN Configuration: %s", config)
+    logging.info("Transformer Configuration: %s", F_config)
     torch.manual_seed(42)
+    maybe_init_wandb(
+        config,
+        args,
+        F_config,
+        run_context,
+        PRETRAINED_BYOL_CHECKPOINT,
+        args.pretrained_cl_checkpoint,
+        "byol-cdan-8-plex",
+    )
 
-    # ================= Data Preparation for CDAN ================ #
     logging.info("Loading data...")
-    data_loaders = {}
     data_config = config["data"]
-    train_bs = data_config["source"]["batch_size"]
-    train_bt = data_config["target"]["batch_size"]
-    test_b = data_config["test"]["batch_size"]
-    dir_data = data_config["dir_data"]
-    source_data_name = data_config["source"]["name"]
-    target_data_name = data_config["target"]["name"]
-    test_data_name = data_config["test"]["name"]
-
-    data_loaders = generate_data_loader(dir_data, train_bs, train_bt, test_b, \
-                                            source_data_name, target_data_name, test_data_name, \
-                                                device, use_normalize = 'None')
-        
+    data_loaders = generate_data_loader(
+        data_config["dir_data"],
+        data_config["source"]["batch_size"],
+        data_config["target"]["batch_size"],
+        data_config["test"]["batch_size"],
+        data_config["source"]["name"],
+        data_config["target"]["name"],
+        data_config["test"]["name"],
+        device,
+        use_normalize='None',
+    )
     logging.info("Data loading complete!")
 
-    # Define the activities for evaluation
     activities = ['Spneu', 'Nmen', 'Lmon', 'HSV1', 'HSV2', 'Hinf', 'Saga', 'Cneo']
-    
-    # Dictionary to store final results for comparison
     final_results = {}
 
-    # ================= 1. Train Baseline Model ================ #
+    if args.eval_checkpoint:
+        logging.info("Running checkpoint-only evaluation from: %s", args.eval_checkpoint)
+        eval_model = Transformer_for_byol(config['class_num'], config['N_seq'], **F_config).to(device)
+        load_matching_state_dict(eval_model, args.eval_checkpoint, device, strip_prefixes=True)
+        eval_metrics = eval_best_model(
+            eval_model,
+            data_loaders,
+            activities,
+            'CheckpointEval',
+            device,
+            run_context,
+            args.eval_split,
+            config=config,
+        )
+        final_results[f'checkpoint_eval_{args.eval_split}'] = eval_metrics["accuracy"]
+        logging.info(
+            "Checkpoint evaluation on %s split complete. Accuracy: %.2f%%",
+            args.eval_split,
+            eval_metrics["accuracy"],
+        )
+        finalize_run(config, run_context, final_results)
+        sys.exit(0)
+
+    if args.run_cl:
+        logging.info("\n\n=========== STARTING BYOL CONTRASTIVE LEARNING ===========")
+        byol_transformer = Transformer_for_byol(config['class_num'], config['N_seq'], **F_config).to(device)
+        cl_pretrained_model = train_BYOL(
+            config,
+            byol_transformer,
+            device,
+            run_context,
+            F_config,
+            image_size=50,
+            cl_slice=(3, 53),
+            params_csv_path=PARAMS_CSV_PATH,
+            augment_fn=augment_fct,
+        )
+        if cl_pretrained_model is not None:
+            final_cl_path = os.path.join(run_context.run_output_dir, "pretrained_model_CL_final.pth")
+            save_checkpoint(
+                cl_pretrained_model,
+                final_cl_path,
+                config,
+                run_context,
+                model_name="byol_contrastive_final",
+                step=config["epochs_CL"],
+            )
+            logging.info("Final BYOL contrastive model saved to: %s", final_cl_path)
+            final_results["BYOL_CL"] = "completed"
+
     if args.run_baseline:
         logging.info("\n\n=========== STARTING BASELINE MODEL TRAINING ===========")
-        # Initialize a fresh transformer model for baseline
         baseline_transformer = Transformer_for_byol(config['class_num'], config['N_seq'], **F_config).to(device)
-        
-        # Train the baseline model (supervised learning on source domain only)
-        baseline_best_model = train_baseline(config, baseline_transformer, data_loaders, device)
-        
-        # Evaluate the baseline model
-        baseline_acc = eval_best_model(baseline_best_model, data_loaders, activities, 'Baseline', device, 'test')
-        final_results['Baseline'] = baseline_acc
-        logging.info(f"Baseline Model Final Accuracy: {baseline_acc:.2f}%")
-    
-    # ================= 2. Train CDAN Model ================ #
+        baseline_best_model = train_baseline(config, baseline_transformer, data_loaders, device, run_context)
+        baseline_metrics = eval_best_model(
+            baseline_best_model, data_loaders, activities, 'Baseline', device, run_context, 'test', config=config
+        )
+        final_results['Baseline'] = baseline_metrics["accuracy"]
+        logging.info("Baseline Model Final Accuracy: %.2f%%", baseline_metrics['accuracy'])
+
     if args.run_cdan:
         logging.info("\n\n=========== STARTING CDAN MODEL TRAINING ===========")
-        # Initialize a fresh transformer model for CDAN
         cdan_transformer = Transformer_for_byol(config['class_num'], config['N_seq'], **F_config).to(device)
-        
-        # Initialize domain classifier
         random_layer, ad_net = build_domain_adversary(cdan_transformer, config, device)
-        
-        # Train the CDAN model
-        cdan_best_model = train_CDAN(config, cdan_transformer, ad_net, random_layer, data_loaders, device)
-        
-        # Evaluate the CDAN model
-        cdan_acc = eval_best_model(cdan_best_model, data_loaders, activities, 'CDAN', device, 'test')
-        final_results['CDAN'] = cdan_acc
-        logging.info(f"CDAN Model Final Accuracy: {cdan_acc:.2f}%")
-    
-    # ================= 3. Train BYOL+CDAN Model ================ #
-    if args.run_byol_cdan:
-        # logging.info("\n\n=========== STARTING BYOL+CDAN MODEL TRAINING ===========")
-        byol_cdan_transformer = Transformer_for_byol(config['class_num'], config['N_seq'], **F_config).to(device)
-
-        byol_cdan_best_model = train_BYOL_CDAN(config, byol_cdan_transformer, device)
-
-        byol_cdan_acc = eval_best_model(
-            byol_cdan_best_model, data_loaders, activities, 'BYOL_CDAN', device, 'test'
+        cdan_best_model = train_CDAN(config, cdan_transformer, ad_net, random_layer, data_loaders, device, run_context)
+        cdan_metrics = eval_best_model(
+            cdan_best_model, data_loaders, activities, 'CDAN', device, run_context, 'test', config=config
         )
-        final_results['BYOL+CDAN'] = byol_cdan_acc
-        logging.info(f"BYOL+CDAN Model Final Accuracy: {byol_cdan_acc:.2f}%")
+        final_results['CDAN'] = cdan_metrics["accuracy"]
+        logging.info("CDAN Model Final Accuracy: %.2f%%", cdan_metrics['accuracy'])
 
-    # Plot final comparison
+    if args.run_byol_cdan:
+        byol_cdan_transformer = Transformer_for_byol(config['class_num'], config['N_seq'], **F_config).to(device)
+        byol_cdan_best_model = post_train_BYOL_CDAN(
+            config,
+            byol_cdan_transformer,
+            data_loaders,
+            device,
+            run_context,
+            F_config,
+            image_size=50,
+            pretrained_cl_checkpoint=args.pretrained_cl_checkpoint,
+        )
+        byol_cdan_metrics = eval_best_model(
+            byol_cdan_best_model, data_loaders, activities, 'BYOL_CDAN', device, run_context, 'test', config=config
+        )
+        final_results['BYOL+CDAN'] = byol_cdan_metrics["accuracy"]
+        logging.info("BYOL+CDAN Model Final Accuracy: %.2f%%", byol_cdan_metrics['accuracy'])
+
     if len(final_results) > 1:
+        import matplotlib.pyplot as plt
+
         plt.figure(figsize=(10, 6))
-        plt.bar(final_results.keys(), final_results.values())
+        numeric_results = {k: v for k, v in final_results.items() if isinstance(v, (int, float))}
+        plt.bar(numeric_results.keys(), numeric_results.values())
         plt.xlabel('Method')
         plt.ylabel('Accuracy (%)')
         plt.title('Comparison of Different Training Methods')
         plt.ylim([0, 100])
-        for i, v in enumerate(final_results.values()):
+        for i, v in enumerate(numeric_results.values()):
             plt.text(i, v + 1, f"{v:.2f}%", ha='center')
-        compare_path = os.path.join(dir_out, f"method_comparison_{timestamp}.png")
+        compare_path = os.path.join(run_context.run_output_dir, "method_comparison.png")
         plt.savefig(compare_path)
-        logging.info(f"Comparison chart saved to: {compare_path}")
-    
+        plt.close()
+        logging.info("Comparison chart saved to: %s", compare_path)
+
+    finalize_run(config, run_context, final_results)
     logging.info("All training and evaluation complete!")

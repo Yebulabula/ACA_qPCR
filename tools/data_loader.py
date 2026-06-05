@@ -146,7 +146,6 @@ def generate_data_loader(dir_data,
     target_Y_df = target_df.Target_cat.astype(int)
     test_X_df = test_df.filter(regex = r'\d+\.?\d*')
     test_Y_df = test_df.Target_cat.astype(int)
-    import matplotlib.pyplot as plt
     if use_normalize == 'min_max':
         scaler = MinMaxScaler()
         source_X_df = pd.DataFrame(scaler.fit_transform(source_X_df), columns=source_X_df.columns)
@@ -183,7 +182,6 @@ def generate_data_loader(dir_data,
     print("Lengths - Source:", len(source_data), "Target:", len(target_data), "Test:", len(test_data))
 
     return data_loaders
-
 
 
 
