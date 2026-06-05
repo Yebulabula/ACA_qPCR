@@ -11,22 +11,18 @@ Programmable Amplification Kinetics Enable AI-Driven High-Level Multiplexing in 
 </p>
 
 <p align="center">
-  <a href="https://drive.google.com/file/d/TEMPORARY_PAPER_LINK/view">
-    <img alt="Paper" src="https://img.shields.io/badge/Paper-Temporary_Link-blue">
+  <a href="https://arxiv.org/abs/ARXIV_ID">
+    <img alt="arXiv" src="https://img.shields.io/badge/arXiv-Paper-b31b1b">
   </a>
-  <a href="https://github.com/TEMPORARY_CODE_LINK">
+  <a href=".">
     <img alt="Code" src="https://img.shields.io/badge/Code-GitHub-black">
   </a>
   <a href="https://drive.google.com/drive/folders/1oxxWH3mHM2xiN-eWj-X_3C-GE3sa8dJe?usp=drive_link">
-    <img alt="Checkpoint" src="https://img.shields.io/badge/Checkpoint-Temporary_Link-green">
+    <img alt="Model" src="https://img.shields.io/badge/Model-Google_Drive-green">
   </a>
   <a href="https://drive.google.com/drive/folders/1oxxWH3mHM2xiN-eWj-X_3C-GE3sa8dJe">
-    <img alt="Dataset" src="https://img.shields.io/badge/Dataset-Temporary_Link-orange">
+    <img alt="Dataset" src="https://img.shields.io/badge/Dataset-Google_Drive-orange">
   </a>
-</p>
-
-<p align="center">
-  Official implementation for BYOL pretraining and T-CDAN fine-tuning for qPCR curve classification.
 </p>
 
 ## Authors
@@ -47,7 +43,7 @@ College London and Imperial College Healthcare NHS Trust; bioMerieux.
 - [Expected Repository Structure](#expected-repository-structure)
 - [Installation](#installation)
 - [Data Preparation](#data-preparation)
-- [Download Checkpoints](#download-checkpoints)
+- [Download Models](#download-models)
 - [BYOL Pretraining](#byol-pretraining)
 - [T-CDAN Training](#t-cdan-training)
 - [Evaluation](#evaluation)
@@ -56,7 +52,7 @@ College London and Imperial College Healthcare NHS Trust; bioMerieux.
 
 ## News
 
-- `2026-06-05`: All code, checkpoints, and datasets are released!
+- `2026-06-05`: All code, models, and datasets are released!
 
 
 ## Expected Repository Structure
@@ -75,8 +71,8 @@ ACA_qPCR/
 |   `-- tst/
 |-- 7_plex/               # downloaded 7-plex data
 |-- 8_plex/               # downloaded 8-plex data
-|-- 7_plex_output/             # generated 7-plex checkpoints/results
-`-- 8_plex_output/             # generated 8-plex checkpoints/results
+|-- 7_plex_output/             # generated 7-plex models/results
+`-- 8_plex_output/             # generated 8-plex models/results
 ```
 
 ## Installation
@@ -123,15 +119,15 @@ Extract the downloaded folders into `ACA_qPCR/`. The expected files include:
 Each curve CSV should contain numeric qPCR curve columns and a `Target_cat`
 label column.
 
-## Download Checkpoints
+## Download Models
 
-Download pretrained BYOL and T-CDAN checkpoints from Google Drive:
+Download pretrained BYOL and T-CDAN models from Google Drive:
 
 ```text
 https://drive.google.com/drive/folders/1oxxWH3mHM2xiN-eWj-X_3C-GE3sa8dJe?usp=drive_link
 ```
 
-Place the checkpoint files under the corresponding output folders:
+Place the model files under the corresponding output folders:
 
 ```text
 ACA_qPCR/
@@ -159,7 +155,7 @@ python BYOL_CDAN_8_plex.py --run_cl true
 python BYOL_CDAN_7_plex.py --run_cl true
 ```
 
-The final BYOL checkpoints are saved as:
+The final BYOL models are saved as:
 
 - `8_plex_output/pretrained_model_CL_final.pth`
 - `7_plex_output/pretrained_model_CL_final.pth`
@@ -205,7 +201,7 @@ python BYOL_CDAN_7_plex.py \
 ```
 
 Outputs are written to `7_plex_output/` or `8_plex_output/`, including
-checkpoints, logs, confusion matrices, `run_config.json`, and
+models, logs, confusion matrices, `run_config.json`, and
 `final_results.json`.
 
 ## Citation
